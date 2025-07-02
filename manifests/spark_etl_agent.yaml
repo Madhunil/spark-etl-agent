@@ -1,0 +1,121 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: spark-etl-agent
+  namespace: spark-etl
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: "jeft-docker.artifactrepo.jnj.com/jph:spark-etl-agent-v7"
+  imagePullSecrets:
+    - jeft-artifactory
+  imagePullPolicy: Always
+  mainApplicationFile: local:///app/app.py
+  arguments: 
+    #- "--k8s"                    # Note the double dash
+    #- "--continuous"               # Added continuous flag
+    - "--job-id" 
+    - "control-m-poc-001"             # Changed to more descriptive job ID
+    #- "--load-date" 
+    #- "2025-06-17"
+    - "--limit"
+    - "250"                      # Added limit parameter
+    #- "--log-level"
+    #- "INFO"
+  sparkVersion: "3.5.0"
+  sparkConf:
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+    #"spark.kubernetes.executor.podNamePrefix": "spark-exec-POC"
+    #"spark.driver.host": "jph-spark-etl-agent-06c950977ebb7705-driver-svc.jcap-jph-migration.svc.cluster.local"
+    #"spark.driver.bindAddress": "0.0.0.0"
+    #"spark.driver.port": "2224"
+    #"spark.driver.blockManager.port": "7079"
+    #"spark.ui.port": "4040"
+    "spark.kubernetes.authenticate.driver.serviceAccountName": "spark-jupyter-acct-jph"
+    "spark.kubernetes.container.image": "jeft-docker.artifactrepo.jnj.com/jph:spark-etl-agent-v7"
+    "spark.kubernetes.container.image.pullSecrets": "jeft-artifactory"
+    "spark.kubernetes.namespace": "jcap-jph-migration"
+    #"spark.driver.host": "headless-spark-etl-jph.jcap-jph-migration.svc.cluster.local"
+
+    # Resource allocation (from your working config)
+    "spark.executor.instances": "2"
+    "spark.driver.memory": "5g"
+    "spark.executor.memory": "6g"
+    "spark.kubernetes.executor.limit.cores": "4"
+    "spark.kubernetes.driver.limit.cores": "1"
+    "spark.kubernetes.driver.request.cores": "0.2"
+    "spark.kubernetes.executor.request.cores": "0.5"
+
+    "spark.shuffle.service.enabled": "false"
+    "spark.dynamicAllocation.enabled": "false"
+    # S3 credentials (from your working config)
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    "spark.hadoop.fs.s3a.assumed.role.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    #"spark.driver.bindAddress": "0.0.0.0"
+    #"spark.driver.port": "2223"
+    
+  volumes:
+    - name: aws-iam-token
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            audience: sts.amazonaws.com
+            expirationSeconds: 86400
+            path: token
+    - name: kube-api-access-c6m92
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            expirationSeconds: 3607
+            path: token
+        - configMap:
+            items:
+            - key: ca.crt
+              path: ca.crt
+            name: kube-root-ca.crt
+        - downwardAPI:
+            items:
+            - fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+              path: namespace
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 3
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 5
+    onSubmissionFailureRetryInterval: 20
+  driver:
+    cores: 1
+    coreLimit: "1200m"
+    memory: "5g"
+    labels:
+      version: 3.5.0
+    serviceAccount: spark-jupyter-acct-jph
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-c6m92
+      readOnly: true
+    - mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+      name: aws-iam-token
+      readOnly: true
+  executor:
+    cores: 4
+    coreLimit: "1200m"
+    instances: 2
+    memory: "6g"
+    labels:
+      version: 3.5.0
+    serviceAccount: spark-jupyter-acct-jph
+    volumeMounts:
+    - name: kube-api-access-c6m92
+      mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      readOnly: true
+    - name: aws-iam-token
+      mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+      readOnly: true

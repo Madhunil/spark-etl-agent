@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-spark-etl
+  namespace: spark-etl
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: driver
+    port: 2223
+    protocol: TCP
+    targetPort: 2223
+  - name: blockmanager
+    port: 7079
+    protocol: TCP
+    targetPort: 7079
+  selector:
+    spark-role: driver 
+    sparkoperator.k8s.io/app-name: spark-etl-agent
+  sessionAffinity: None
+  type: ClusterIP
