@@ -2,96 +2,82 @@
 ETL service for the Spark application.
 Handles the specific Control M POC ETL operation.
 """
-from loguru import logger
+from typing import Optional, Dict, Any
 from datetime import datetime
+from loguru import logger
 from pyspark.sql.functions import lit
 from utils.db_utils import RedshiftConnector
 
 class ETLService:
-    """
-    Service for ETL operations - implements the exact Control M POC ETL logic.
-    """
+    """Enhanced ETL service for Control M POC operations."""
     
     def __init__(self, spark):
-        """
-        Initialize the ETL service.
-        
-        Args:
-            spark: Active SparkSession
-        """
+        """Initialize ETL service."""
         self.spark = spark
-        self.redshift = RedshiftConnector(spark)
-        
-        logger.info("ETL Service initialized")
+        self.redshift = RedshiftConnector(spark, connection_type="poc")
+        logger.info("🔧 ETL Service (Control M POC) initialized")
     
-    def run_control_m_poc_etl(self, load_date=None, limit=10):
+    def run_control_m_poc_etl(self, load_date: Optional[str] = None, 
+                             limit: int = 10) -> Dict[str, Any]:
         """
-        Run the Control M POC ETL job - implements the exact user requirements:
-        
-        1. Read from dna_actln_dwh.vw_patients_opsumit_cap with limit
-        2. Add load_date column 
-        3. Select specific columns: load_date, product, ac_number, referral_date
-        4. Write to dna_actln_dwh.ControlM_New_test in append mode
+        Run Control M POC ETL with enhanced monitoring.
         
         Args:
-            load_date (str, optional): Load date to use (default: current date)
-            limit (int, optional): Number of rows to extract (default: 10)
-        
+            load_date: Load date (defaults to current date)
+            limit: Number of rows to process
+            
         Returns:
-            dict: Job execution results
+            Job execution results
         """
         try:
-            logger.info("Starting Control M POC ETL job")
+            logger.info("🚀 Starting Control M POC ETL")
             start_time = datetime.now()
             
-            # Set load date to today if not provided
             if not load_date:
                 load_date = datetime.now().strftime("%Y-%m-%d")
-            logger.info(f"Using load date: {load_date}")
             
-            # Step 1: Read from source table with limit
+            logger.info(f"📅 Load date: {load_date}")
+            logger.info(f"🔢 Row limit: {limit}")
+            
+            # Read source data
             source_table = "dna_actln_dwh.vw_patients_opsumit_cap"
-            logger.info(f"Reading {limit} rows from {source_table}")
+            logger.info(f"📖 Reading from {source_table}")
             
             df = self.redshift.read_table(
-                table_name="vw_patients_opsumit_cap", 
-                schema="dna_actln_dwh", 
+                table_name="vw_patients_opsumit_cap",
+                schema="dna_actln_dwh",
                 limit=limit
             )
             
-            # Step 2: Add load_date column
-            logger.info(f"Adding load_date column with value: {load_date}")
+            # Add load_date column
             df = df.withColumn("load_date", lit(load_date))
             
-            # Step 3: Select required columns in exact order
+            # Select required columns
             required_columns = ["load_date", "product", "ac_number", "referral_date"]
-            logger.info(f"Selecting columns: {required_columns}")
             df = df.select(*required_columns)
             
-            # Log sample data
-            logger.info("Sample transformed data:")
+            logger.info("📋 Sample transformed data:")
             df.show(5, truncate=False)
             
             row_count = df.count()
-            logger.info(f"Prepared {row_count} rows for loading")
             
-            # Step 4: Write to destination table in append mode
+            # Write to destination
             dest_table = "dna_actln_dwh.ControlM_New_test"
-            logger.info(f"Writing to {dest_table} in append mode")
+            logger.info(f"📝 Writing to {dest_table}")
             
             self.redshift.write_table(
-                df=df, 
-                table_name="ControlM_New_test", 
-                schema="dna_actln_dwh", 
+                df=df,
+                table_name="ControlM_New_test",
+                schema="dna_actln_dwh",
                 mode="append"
             )
             
-            # Calculate job metrics
+            # Calculate metrics
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
-            logger.info(f"✅ Control M POC ETL job completed successfully!")
-            logger.info(f"📊 Processed {row_count} rows in {duration:.2f} seconds")
+            logger.info(f"✅ Control M POC ETL completed successfully!")
+            logger.info(f"📊 Processed {row_count:,} rows in {duration:.2f} seconds")
             
             return {
                 "status": "Success",
@@ -101,17 +87,15 @@ class ETLService:
                 "duration_seconds": duration,
                 "source_table": source_table,
                 "destination_table": dest_table,
-                "load_date": load_date
+                "load_date": load_date,
+                "limit": limit
             }
             
         except Exception as e:
-            logger.exception(f"❌ Control M POC ETL job failed: {str(e)}")
-            end_time = datetime.now()
+            logger.exception(f"❌ Control M POC ETL failed: {str(e)}")
             
-            # Calculate duration if start_time is defined
-            duration = 0
-            if 'start_time' in locals():
-                duration = (end_time - start_time).total_seconds()
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds() if 'start_time' in locals() else 0
             
             return {
                 "status": "Failed",

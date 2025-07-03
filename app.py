@@ -10,8 +10,9 @@ import json
 import time
 import signal
 from datetime import datetime
+from typing import Dict, Any, Optional
 
-# Ensure the application directory is in the Python path
+# Ensure application directory is in Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
@@ -31,246 +32,347 @@ def signal_handler(signum, frame):
     shutdown_requested = True
     print("\n🛑 Shutdown signal received. Finishing current job and exiting...")
 
-def parse_arguments():
-    """
-    Parse command-line arguments for the application.
-    
-    Returns:
-        argparse.Namespace: Parsed command-line arguments
-    """
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create comprehensive argument parser."""
     parser = argparse.ArgumentParser(
-        description="Spark ETL Application - Control M POC ETL Job",
+        description="Enhanced Spark ETL Agent - Production Ready",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Run Control M POC ETL job once
-  %(prog)s --job-id opsumit_001 --load-date 2025-05-20 --limit 10
+🚀 AVAILABLE JOB TYPES:
+  control_m_poc_etl    [POC] Development/testing with row limits
+  jcap_pa_etl          [Production] Full workflow with backup/validation/alerts
+
+📖 USAGE EXAMPLES:
+  # List all available job types
+  %(prog)s --list-job-types
   
-  # Run continuously every minute
-  %(prog)s --job-id opsumit_001 --limit 10 --continuous
+  # Run Control M POC ETL (development)
+  %(prog)s --job-type control_m_poc_etl --job-id poc_001 --load-date 2025-05-20 --limit 10
   
-  # Run continuously every 30 seconds
-  %(prog)s --job-id opsumit_001 --limit 5 --continuous --interval 30
+  # Run JCAP PA ETL (production)
+  %(prog)s --job-type jcap_pa_etl --job-id jcap_daily_001 --load-date 2025-05-20
   
-  # Run with JSON configuration continuously
-  %(prog)s --job-config '{"id": "test_001", "limit": 5}' --continuous
+  # Run continuously every 5 minutes
+  %(prog)s --job-type jcap_pa_etl --job-id jcap_hourly --continuous --interval 300
   
-  # Force local mode for development
-  %(prog)s --local --job-id dev_001 --load-date 2025-05-20
+  # Use JSON configuration
+  %(prog)s --job-config '{"id": "test_001", "type": "control_m_poc_etl", "limit": 5}'
+  
+  # Force local development mode
+  %(prog)s --local --job-type control_m_poc_etl --job-id dev_test --limit 5
         """
     )
     
     # Job specification
-    parser.add_argument("--job-id", type=str, help="Job ID to execute")
-    parser.add_argument("--job-config", type=str, help="Job configuration JSON string")
-    parser.add_argument("--job-config-file", type=str, help="Path to job configuration file")
+    job_group = parser.add_argument_group('Job Configuration')
+    job_group.add_argument("--job-type", type=str,
+                          choices=["control_m_poc_etl", "jcap_pa_etl"],
+                          help="Type of job to execute")
+    job_group.add_argument("--job-id", type=str, help="Unique job identifier")
+    job_group.add_argument("--job-config", type=str, help="JSON job configuration string")
+    job_group.add_argument("--job-config-file", type=str, help="Path to job configuration file")
+    job_group.add_argument("--list-job-types", action="store_true",
+                          help="List all supported job types and exit")
     
     # Job parameters
-    parser.add_argument("--load-date", type=str, help="Load date (YYYY-MM-DD)")
-    parser.add_argument("--limit", type=int, default=10, help="Limit the number of rows to process (default: 10)")
-    
-    # Continuous execution
-    parser.add_argument("--continuous", action="store_true", help="Run continuously instead of once")
-    parser.add_argument("--interval", type=int, default=60, help="Interval between runs in seconds (default: 60)")
+    params_group = parser.add_argument_group('Job Parameters')
+    params_group.add_argument("--load-date", type=str, help="Load date (YYYY-MM-DD)")
+    params_group.add_argument("--limit", type=int, default=10,
+                             help="Row limit for control_m_poc_etl (default: 10)")
     
     # Execution control
-    parser.add_argument("--local", action="store_true", help="Force local mode (overrides auto-detection)")
-    parser.add_argument("--k8s", action="store_true", help="Force Kubernetes mode (overrides auto-detection)")
+    exec_group = parser.add_argument_group('Execution Control')
+    exec_group.add_argument("--continuous", action="store_true",
+                           help="Run continuously instead of once")
+    exec_group.add_argument("--interval", type=int, default=60,
+                           help="Interval between runs in seconds (default: 60)")
+    exec_group.add_argument("--local", action="store_true",
+                           help="Force local mode (overrides auto-detection)")
+    exec_group.add_argument("--k8s", action="store_true",
+                           help="Force Kubernetes mode (overrides auto-detection)")
     
     # Logging
-    parser.add_argument("--log-level", type=str, default="INFO", 
-                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                        help="Logging level (default: INFO)")
+    logging_group = parser.add_argument_group('Logging')
+    logging_group.add_argument("--log-level", type=str, default="INFO",
+                              choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                              help="Logging level (default: INFO)")
     
-    return parser.parse_args()
+    return parser
 
-def run_single_job(job_service, job_config):
-    """
-    Run a single job execution.
+def display_job_types(job_service: JobService) -> None:
+    """Display available job types with detailed information."""
+    print("\n" + "="*80)
+    print("🚀 ENHANCED SPARK ETL AGENT - SUPPORTED JOB TYPES")
+    print("="*80)
     
-    Args:
-        job_service: JobService instance
-        job_config: Job configuration dictionary
+    job_types = job_service.list_supported_job_types()
     
-    Returns:
-        dict: Job execution results
-    """
-    # Update load_date to current date if not specified in continuous mode
-    if "load_date" not in job_config or not job_config["load_date"]:
+    for i, (job_type, description) in enumerate(job_types.items(), 1):
+        print(f"\n{i}. 🔧 {job_type}")
+        print(f"   {description}")
+        
+        # Add usage example
+        if job_type == "control_m_poc_etl":
+            print(f"   💡 Example: python3 app.py --job-type {job_type} --job-id poc_001 --limit 10")
+        elif job_type == "jcap_pa_etl":
+            print(f"   💡 Example: python3 app.py --job-type {job_type} --job-id jcap_daily")
+    
+    print(f"\n{'='*80}")
+    print("💡 Use --job-type <type> to specify which job to run")
+    print("📖 Use --help for complete usage information")
+    print("="*80 + "\n")
+
+def create_job_config_from_args(args) -> Optional[Dict[str, Any]]:
+    """Create job configuration from command-line arguments."""
+    if not args.job_type or not args.job_id:
+        return None
+    
+    config = {
+        "id": args.job_id,
+        "name": f"{args.job_type.replace('_', ' ').title()} - {args.job_id}",
+        "type": args.job_type,
+        "load_date": args.load_date
+    }
+    
+    # Add job-specific parameters
+    if args.job_type == "control_m_poc_etl":
+        config["limit"] = args.limit
+    
+    return config
+
+def load_job_config_from_file(file_path: str) -> Dict[str, Any]:
+    """Load job configuration from JSON file."""
+    try:
+        with open(file_path, 'r') as f:
+            config = json.load(f)
+        return config
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"Failed to load job config from {file_path}: {str(e)}") from e
+
+def execute_single_job(job_service: JobService, job_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a single job with preprocessing."""
+    # Set current date if load_date is not specified
+    if not job_config.get("load_date"):
         job_config["load_date"] = datetime.now().strftime("%Y-%m-%d")
     
-    # Execute the job
-    result = job_service.execute_job(job_config)
-    return result
+    return job_service.execute_job(job_config)
 
-def main():
-    """
-    Main application entry point.
+def run_continuous_jobs(job_service: JobService, job_config: Dict[str, Any], 
+                       interval: int) -> Dict[str, Any]:
+    """Run jobs continuously with comprehensive monitoring."""
+    from loguru import logger
     
-    Returns:
-        int: Exit code (0 for success, non-zero for failure)
-    """
-    # Set up signal handlers for graceful shutdown
+    logger.info("🔄 Starting continuous job execution")
+    
+    stats = {
+        "total_runs": 0,
+        "successful_runs": 0,
+        "failed_runs": 0,
+        "total_rows_processed": 0,
+        "start_time": datetime.now()
+    }
+    
+    while not shutdown_requested:
+        stats["total_runs"] += 1
+        run_number = stats["total_runs"]
+        
+        logger.info(f"🎬 Starting job execution #{run_number}")
+        
+        try:
+            result = execute_single_job(job_service, job_config.copy())
+            
+            if result["status"] == "Success":
+                stats["successful_runs"] += 1
+                rows_processed = result.get("rows_processed", 0)
+                stats["total_rows_processed"] += rows_processed
+                
+                logger.info(f"✅ Run #{run_number} completed successfully!")
+                logger.info(f"📊 Processed {rows_processed:,} rows")
+                
+                # Log job-specific metrics
+                if "variance_percentage" in result:
+                    variance = result["variance_percentage"]
+                    threshold_exceeded = result.get("variance_threshold_exceeded", False)
+                    logger.info(f"📈 Data variance: {variance:.2f}%")
+                    
+                    if threshold_exceeded:
+                        email_sent = result.get("email_sent", False)
+                        logger.warning(f"⚠️ Variance alert sent: {email_sent}")
+            else:
+                stats["failed_runs"] += 1
+                error = result.get("error", "Unknown error")
+                logger.error(f"❌ Run #{run_number} failed: {error}")
+            
+            # Log cumulative stats
+            success_rate = (stats["successful_runs"] / stats["total_runs"]) * 100
+            logger.info(f"📈 Stats: {stats['successful_runs']}/{stats['total_runs']} "
+                       f"({success_rate:.1f}% success), "
+                       f"{stats['total_rows_processed']:,} total rows")
+            
+        except Exception as e:
+            stats["failed_runs"] += 1
+            logger.exception(f"💥 Unhandled exception in run #{run_number}")
+        
+        # Wait for next execution
+        if not shutdown_requested:
+            logger.info(f"⏳ Waiting {interval} seconds before next run...")
+            for _ in range(interval):
+                if shutdown_requested:
+                    break
+                time.sleep(1)
+    
+    # Final statistics
+    total_duration = (datetime.now() - stats["start_time"]).total_seconds()
+    success_rate = (stats["successful_runs"] / stats["total_runs"]) * 100 if stats["total_runs"] > 0 else 0
+    
+    logger.info("🏁 Continuous execution completed")
+    logger.info(f"📊 Final Statistics:")
+    logger.info(f"   Total Runs: {stats['total_runs']}")
+    logger.info(f"   Successful: {stats['successful_runs']} ({success_rate:.1f}%)")
+    logger.info(f"   Failed: {stats['failed_runs']}")
+    logger.info(f"   Total Rows: {stats['total_rows_processed']:,}")
+    logger.info(f"   Duration: {total_duration:.2f} seconds")
+    
+    return stats
+
+def main() -> int:
+    """Enhanced main application entry point."""
+    # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Parse command-line arguments
-    args = parse_arguments()
+    # Parse arguments
+    parser = create_argument_parser()
+    args = parser.parse_args()
     
     # Set up logging
     setup_logging(log_level=args.log_level)
     
-    # Import logger after setup
     from loguru import logger
-    logger.info("🚀 Starting Spark ETL agent at 30-06 341")
+    logger.info("Starting Spark ETL agent")
     
     if args.continuous:
-        logger.info(f"🔄 Running in continuous mode with {args.interval}s interval")
+        logger.info(f"🔄 Continuous mode enabled (interval: {args.interval}s)")
     else:
-        logger.info("🎯 Running in single execution mode")
+        logger.info("🎯 Single execution mode")
     
-    # Get application settings
     try:
+        # Load settings
         settings = get_settings()
-        logger.info("✅ Application settings loaded successfully")
-    except Exception as e:
-        logger.error(f"❌ Failed to load application settings: {str(e)}")
-        return 1
-    
-    # Determine execution mode
-    local_mode = None  # None means auto-detect
-    if args.local and args.k8s:
-        logger.warning("Both --local and --k8s specified, using auto-detection")
-    elif args.local:
-        local_mode = True
-        logger.info("🏠 Forcing local mode due to --local flag")
-    elif args.k8s:
-        local_mode = False
-        logger.info("☸️ Forcing Kubernetes mode due to --k8s flag")
-    
-    # Create Spark session manager
-    spark_manager = SparkManager(local_mode=local_mode)
-    
-    try:
-        # Create Spark session
+        logger.info("✅ Application settings loaded")
+        
+        # Determine execution mode
+        local_mode = None
+        if args.local and args.k8s:
+            logger.warning("Both --local and --k8s specified, using auto-detection")
+        elif args.local:
+            local_mode = True
+            logger.info("🏠 Forcing local mode")
+        elif args.k8s:
+            local_mode = False
+            logger.info("☸️ Forcing Kubernetes mode")
+        
+        # Initialize Spark
+        spark_manager = SparkManager(local_mode=local_mode)
         logger.info("⚡ Initializing Spark session...")
         spark = spark_manager.create_spark_session()
         
         # Initialize job service
         job_service = JobService(spark)
         
+        # Handle list job types
+        if args.list_job_types:
+            display_job_types(job_service)
+            return 0
+        
         # Determine job configuration
         job_config = None
         
         if args.job_config:
-            # Parse job configuration from command-line JSON string
             try:
                 job_config = json.loads(args.job_config)
-                logger.info("📋 Using job configuration from command-line argument")
+                logger.info("📋 Using JSON job configuration from command line")
             except json.JSONDecodeError as e:
-                logger.error(f"❌ Error parsing job configuration JSON: {str(e)}")
+                logger.error(f"❌ Invalid JSON configuration: {str(e)}")
                 return 1
         
         elif args.job_config_file:
-            # Load job configuration from file
             try:
-                with open(args.job_config_file, 'r') as f:
-                    job_config = json.load(f)
-                logger.info(f"📄 Loaded job configuration from file: {args.job_config_file}")
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                logger.error(f"❌ Error loading job configuration file: {str(e)}")
+                job_config = load_job_config_from_file(args.job_config_file)
+                logger.info(f"📄 Loaded job configuration from {args.job_config_file}")
+            except RuntimeError as e:
+                logger.error(f"❌ {str(e)}")
                 return 1
         
-        elif args.job_id:
-            # Create a simple configuration based on job ID
-            job_config = {
-                "id": args.job_id,
-                "name": f"Control M POC ETL Job {args.job_id}",
-                "type": "control_m_poc_etl",
-                "load_date": args.load_date,  # Will be set to current date if None in continuous mode
-                "limit": args.limit
-            }
-            logger.info(f"📝 Created job configuration for job ID: {args.job_id}")
-        
         else:
-            logger.error("❌ No job configuration provided. Use --job-id, --job-config, or --job-config-file")
-            logger.info("💡 Example: python3 app.py --job-id opsumit_001 --load-date 2025-05-20 --limit 10")
+            job_config = create_job_config_from_args(args)
+            if job_config:
+                logger.info(f"📝 Created configuration: {args.job_type} - {args.job_id}")
+            else:
+                logger.error("❌ No job configuration provided")
+                logger.info("💡 Examples:")
+                logger.info("   python3 app.py --job-type control_m_poc_etl --job-id poc_001 --limit 10")
+                logger.info("   python3 app.py --job-type jcap_pa_etl --job-id jcap_daily")
+                logger.info("   python3 app.py --list-job-types")
+                return 1
+        
+        # Validate configuration
+        required_fields = ["type", "id"]
+        missing_fields = [field for field in required_fields if field not in job_config]
+        
+        if missing_fields:
+            logger.error(f"❌ Missing required fields: {missing_fields}")
             return 1
         
-        # Ensure job type is set
-        if "type" not in job_config:
-            job_config["type"] = "control_m_poc_etl"
-        
-        # Log job configuration (safe version)
-        safe_config = {k: v for k, v in job_config.items() if k != "password"}
+        # Log safe configuration
+        safe_config = {k: v for k, v in job_config.items() 
+                      if not any(sensitive in k.lower() for sensitive in ["password", "secret", "key"])}
         logger.info(f"🎯 Job configuration: {safe_config}")
         
         # Execute job(s)
         if args.continuous:
-            # Continuous execution mode
-            logger.info("🔄 Starting continuous job execution...")
-            run_count = 0
-            total_rows_processed = 0
-            
-            while not shutdown_requested:
-                run_count += 1
-                logger.info(f"🎬 Starting job execution #{run_count}")
-                
-                try:
-                    result = run_single_job(job_service, job_config.copy())
-                    
-                    if result["status"] == "Success":
-                        rows_processed = result.get('rows_processed', 0)
-                        total_rows_processed += rows_processed
-                        logger.info(f"✅ Run #{run_count} completed successfully! Processed {rows_processed} rows.")
-                        logger.info(f"📊 Total rows processed so far: {total_rows_processed}")
-                    else:
-                        logger.error(f"❌ Run #{run_count} failed: {result.get('error', 'Unknown error')}")
-                        # Continue running even if one job fails
-                    
-                except Exception as e:
-                    logger.exception(f"💥 Unhandled exception in run #{run_count}")
-                    # Continue running even if one job fails
-                
-                # Wait for the specified interval before next run
-                if not shutdown_requested:
-                    logger.info(f"⏳ Waiting {args.interval} seconds before next run...")
-                    for _ in range(args.interval):
-                        if shutdown_requested:
-                            break
-                        time.sleep(1)
-            
-            logger.info(f"🏁 Continuous execution stopped. Completed {run_count} runs, processed {total_rows_processed} total rows.")
-            return 0
-        
+            stats = run_continuous_jobs(job_service, job_config, args.interval)
+            success_rate = (stats["successful_runs"] / stats["total_runs"]) * 100 if stats["total_runs"] > 0 else 0
+            return 0 if success_rate >= 50 else 1  # Consider 50%+ success rate as overall success
         else:
-            # Single execution mode
-            logger.info("🎬 Starting single job execution...")
-            result = run_single_job(job_service, job_config)
+            result = execute_single_job(job_service, job_config)
             
-            # Return appropriate exit code based on job status
             if result["status"] == "Success":
-                logger.info(f"🎉 Job completed successfully! Processed {result.get('rows_processed', 0)} rows.")
+                rows = result.get("rows_processed", 0)
+                duration = result.get("duration_seconds", 0)
+                
+                logger.info(f"🎉 Job completed successfully!")
+                logger.info(f"📊 Processed {rows:,} rows in {duration:.2f} seconds")
+                
+                # Log additional metrics
+                if "variance_percentage" in result:
+                    variance = result["variance_percentage"]
+                    threshold_exceeded = result.get("variance_threshold_exceeded", False)
+                    logger.info(f"📈 Data variance: {variance:.2f}%")
+                    
+                    if threshold_exceeded:
+                        email_sent = result.get("email_sent", False)
+                        logger.warning(f"⚠️ Variance threshold exceeded - Alert sent: {email_sent}")
+                
                 return 0
             else:
-                logger.error(f"💥 Job failed: {result.get('error', 'Unknown error')}")
+                error = result.get("error", "Unknown error")
+                logger.error(f"💥 Job failed: {error}")
                 return 1
-        
+    
     except KeyboardInterrupt:
-        logger.warning("⏸️ Job execution interrupted by user")
-        return 130  # Standard exit code for SIGINT
-        
+        logger.warning("⏸️ Execution interrupted by user")
+        return 130
+    
     except Exception as e:
-        logger.exception(f"💥 Unhandled exception in main application")
+        logger.exception(f"💥 Unhandled application error: {str(e)}")
         return 1
     
     finally:
-        # Clean up resources
+        # Cleanup
         if 'spark_manager' in locals() and hasattr(spark_manager, 'spark') and spark_manager.spark:
-            logger.info("🧹 Cleaning up resources...")
+            logger.info("🧹 Cleaning up Spark resources...")
             spark_manager.stop_spark_session()
-    
-    return 0
 
 if __name__ == "__main__":
     exit_code = main()
