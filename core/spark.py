@@ -85,8 +85,16 @@ class SparkManager:
         builder = builder.config("spark.sql.adaptive.enabled", "true")
         builder = builder.config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         
+        # Add AWS S3 dependencies
+        builder = builder.config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.517")
+        logger.info("📦 AWS S3 dependencies configured")
+        
+        # Configure S3A filesystem
+        builder = builder.config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+        
         # Add JDBC driver if available
         if os.path.exists(self.settings.REDSHIFT_JDBC_DRIVER_PATH):
+            # Combine with existing jars if any
             builder = builder.config("spark.jars", self.settings.REDSHIFT_JDBC_DRIVER_PATH)
             logger.info(f"📦 JDBC driver loaded: {self.settings.REDSHIFT_JDBC_DRIVER_PATH}")
         else:
@@ -125,7 +133,7 @@ class SparkManager:
         conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
 
         #Spark services
-        conf.set("spark..shuffle.service.enabled", "false")
+        conf.set("spark.shuffle.service.enabled", "false")
         conf.set("spark.dynamicAllocation.enabled", "false")
 
         #s3 configuration
@@ -139,13 +147,21 @@ class SparkManager:
         # conf.set("spark.hadoop.fs.s3a.secret.key", "<YOUR_SECRET_KEY>")
         conf.set("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
         conf.set("spark.hadoop.com.amazonaws.services.s3.enableV4", "true")
-        conf.set("spark.jars", "/opt/spark/jars/aws-java-sdk-bundle-1.12.517.jar, /opt/spark/jars/hadoop-aws-3.3.4.jar")
-
-        #conf.set("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.517")
-
+        # Use packages instead of jars for better dependency management
+        conf.set("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.517")
+        
+        # For local jar files
+        aws_jars = ["/opt/spark/jars/aws-java-sdk-bundle-1.12.517.jar", "/opt/spark/jars/hadoop-aws-3.3.4.jar"]
+        
         # JDBC driver
+        jdbc_jars = []
         if os.path.exists(self.settings.REDSHIFT_JDBC_DRIVER_PATH):
-            conf.set("spark.jars", self.settings.REDSHIFT_JDBC_DRIVER_PATH)
+            jdbc_jars.append(self.settings.REDSHIFT_JDBC_DRIVER_PATH)
+            
+        # Combine all jars
+        all_jars = aws_jars + jdbc_jars
+        if all_jars:
+            conf.set("spark.jars", ",".join(all_jars))
         
         builder = SparkSession.builder.config(conf=conf)
         return builder.getOrCreate()

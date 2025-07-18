@@ -8,7 +8,7 @@ A modular Python agent application for running Spark ETL jobs on Kubernetes.
 - Modular architecture for maintainability
 - Configurable via environment variables or command-line arguments
 - Comprehensive logging
-- Generalized Agentic Structure to run myraid Jobs and Services
+- Generalized Agentic Structure to run myriad Jobs and Services
 
 ## Prerequisites
 
