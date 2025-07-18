@@ -107,23 +107,42 @@ class SparkManager:
         conf.set("spark.kubernetes.namespace", self.settings.K8S_NAMESPACE)
         
         # Resource configuration
-        conf.set("spark.executor.instances", "2")
+        conf.set("spark.executor.instances", "1")
         conf.set("spark.driver.memory", self.settings.SPARK_DRIVER_MEMORY)
         conf.set("spark.executor.memory", self.settings.SPARK_EXECUTOR_MEMORY)
-        conf.set("spark.kubernetes.executor.limit.cores", "2")
-        conf.set("spark.kubernetes.driver.limit.cores", "2")
-        conf.set("spark.kubernetes.driver.request.cores", "0.5")
-        conf.set("spark.kubernetes.executor.request.cores", "0.5")
+        conf.set("spark.kubernetes.executor.limit.cores", "1")
+        conf.set("spark.kubernetes.driver.limit.cores", "1")
+        conf.set("spark.kubernetes.driver.request.cores", "0.2")
+        conf.set("spark.kubernetes.executor.request.cores", "0.2")
         
         # Network configuration
-        conf.set("spark.driver.host", "headless-spark-etl-jph")
-        conf.set("spark.driver.port", "2223")
+        conf.set("spark.driver.host", self.settings.SPARK_DRIVER_HOST)
+        conf.set("spark.driver.port", self.settings.SPARK_DRIVER_PORT)
         
         # Performance optimizations
         conf.set("spark.sql.adaptive.enabled", "true")
         conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
         conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+
+        #Spark services
+        conf.set("spark..shuffle.service.enabled", "false")
+        conf.set("spark.dynamicAllocation.enabled", "false")
+
+        #s3 configuration
+        conf.set("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.WebIdentityTokenCredentialsProvider")
+        conf.set("spark.hadoop.fs.s3a.assumed.role.credentials.provider", "com.amazonaws.auth.WebIdentityTokenCredentialsProvider")
+
+        conf.set("fs.s3a.temp.dir", "s3a://itx-ahr-jcap-jph-data/temp/")
         
+        conf.set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+        # conf.set("spark.hadoop.fs.s3a.access.key", "<YOUR_ACCESS_KEY>")
+        # conf.set("spark.hadoop.fs.s3a.secret.key", "<YOUR_SECRET_KEY>")
+        conf.set("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
+        conf.set("spark.hadoop.com.amazonaws.services.s3.enableV4", "true")
+        conf.set("spark.jars", "/opt/spark/jars/aws-java-sdk-bundle-1.12.517.jar, /opt/spark/jars/hadoop-aws-3.3.4.jar")
+
+        #conf.set("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.517")
+
         # JDBC driver
         if os.path.exists(self.settings.REDSHIFT_JDBC_DRIVER_PATH):
             conf.set("spark.jars", self.settings.REDSHIFT_JDBC_DRIVER_PATH)
@@ -141,7 +160,7 @@ class SparkManager:
             # Set timezone
             self.spark.conf.set("spark.sql.session.timeZone", "UTC")
             
-            logger.info("⚙️ Spark session configured with optimizations")
+            logger.info("⚙️  Spark session configured with optimizations")
     
     def _log_session_info(self) -> None:
         """Log session information."""
@@ -149,7 +168,6 @@ class SparkManager:
             sc = self.spark.sparkContext
             logger.info(f"✅ Spark session created successfully")
             logger.info(f"📊 App ID: {sc.applicationId}")
-            logger.info(f"🎯 Master: {sc.master}")
             logger.info(f"🏷️ Version: {sc.version}")
             logger.info(f"💾 Default parallelism: {sc.defaultParallelism}")
     

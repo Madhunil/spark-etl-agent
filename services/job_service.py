@@ -37,7 +37,7 @@ class JobService:
             }
         }
         
-        logger.info("🎛️ Job Service initialized")
+        logger.info("🎛️  Job Service initialized")
         logger.info(f"📋 Supported job types: {len(self.supported_job_types)}")
         
         for job_type, config in self.supported_job_types.items():
@@ -53,12 +53,7 @@ class JobService:
     def execute_job(self, job_config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute job with comprehensive monitoring and error handling.
-        
-        Args:
-            job_config: Job configuration dictionary
-            
-        Returns:
-            Job execution results
+        Now includes job-specific configuration validation.
         """
         job_id = job_config.get("id", "unknown")
         job_name = job_config.get("name", f"job-{job_id}")
@@ -70,6 +65,17 @@ class JobService:
         if job_type not in self.supported_job_types:
             error_msg = (f"Unknown job type: {job_type}. "
                         f"Supported types: {list(self.supported_job_types.keys())}")
+            logger.error(f"❌ {error_msg}")
+            return self._create_error_result(job_id, job_name, job_type, error_msg)
+        
+        # Validate configuration for specific job type
+        try:
+            from core.config import get_settings
+            settings = get_settings()
+            settings.validate_for_job_type(job_type)
+            logger.info(f"✅ Configuration validated for job type: {job_type}")
+        except ValueError as e:
+            error_msg = f"Configuration validation failed: {str(e)}"
             logger.error(f"❌ {error_msg}")
             return self._create_error_result(job_id, job_name, job_type, error_msg)
         

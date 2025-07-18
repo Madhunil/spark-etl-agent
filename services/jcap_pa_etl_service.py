@@ -28,10 +28,10 @@ class JcapPaEtlService:
         self.email_service = EmailService()
         
         # Configuration
-        self.main_table = "jcap_pa"
-        self.backup_table = "jcap_pa_bkp"
-        self.schema = "jcap_jph"
-        self.s3_path = f"s3a://{self.settings.S3_BUCKET}/prod/jcap_pa/"
+        self.main_table = "jcap_pa_dashboard"
+        self.backup_table = "jcap_pa_dashboard_bak"
+        self.schema = self.settings.JCAP_REDSHIFT_SCHEMA
+        self.s3_path = f"s3://{self.settings.S3_BUCKET}/jcap_pa_dashboard/"
         
         logger.info("🏭 JCAP PA ETL Service initialized (Production)")
         logger.info(f"📋 CDP Source: {self.cdp_connector.connection_type}")
@@ -69,7 +69,8 @@ class JcapPaEtlService:
             # Step 4: Stage to S3
             logger.info("4️⃣ Staging data to S3")
             self._stage_to_s3(df_transformed)
-            
+            #logger.info("4️⃣ Staging data to S3 skipped")
+
             # Step 5: Load to destination
             logger.info("5️⃣ Loading to destination")
             self._load_to_destination()
@@ -86,7 +87,14 @@ class JcapPaEtlService:
             logger.info("✅ JCAP PA ETL completed successfully!")
             logger.info(f"📊 Processed {current_count:,} rows in {duration:.2f} seconds")
             logger.info(f"📈 Variance: {variance_result['variance_percentage']:.2f}%")
-            
+
+            # Send success notification
+            self.email_service.send_job_completion_notification(
+                job_name="JCAP PA ETL",
+                status="Success",
+                duration=duration
+            )
+
             return {
                 "status": "Success",
                 "rows_processed": current_count,
@@ -166,17 +174,22 @@ class JcapPaEtlService:
             raise RuntimeError(f"Backup creation failed: {str(e)}") from e
     
     def _extract_cdp_data(self):
-        """Extract data from CDP with optimized query."""
+        """
+        Extract data from CDP with optimized query.
+        
+        Returns:
+            DataFrame: Query results
+        """
         try:
-            # Enhanced CDP query with better formatting
+            # Enhanced CDP query with PROPER Redshift syntax
             cdp_query = """
             SELECT DISTINCT
-                date_format(current_date(), 'MM-dd-yyyy') AS JCAP_table_loaddate,
+                TO_CHAR(CURRENT_DATE, 'MM-DD-YYYY') AS JCAP_table_loaddate,
                 p.pmc_patid,
                 U.MANAGING_HCP_STATE AS REFERRING_HCP_PATH_STATE,
                 P.prod_nm AS DrugorTherapy,
-                date_format(pa_completed_date, 'MM-dd-yyyy') AS PA_CompletedDate,
-                date_format(pa_initiated_date, 'MM-dd-yyyy') AS PA_InitiatedDate,
+                TO_CHAR(pa_completed_date, 'MM-DD-YYYY') AS PA_CompletedDate,
+                TO_CHAR(pa_initiated_date, 'MM-DD-YYYY') AS PA_InitiatedDate,
                 p.pa_disposition AS PADisposition,
                 P.Appeal_Disposition AS AppealDisposition,
                 P.FE_REquired AS FEREquired,
@@ -184,7 +197,7 @@ class JcapPaEtlService:
                 P.rx_PayerName AS rx_PayerName,
                 P.rx_PayerType AS rx_PayerType,
                 p.sr_type AS srtype,
-                date_format(p.load_date, 'MM-dd-yyyy') AS load_date,
+                TO_CHAR(p.load_date, 'MM-DD-YYYY') AS load_date,
                 p.ins_planname AS insurancebenefitplanname,
                 p.pbm_name AS pbmpayername,
                 C.LHM_Name,
@@ -210,8 +223,8 @@ class JcapPaEtlService:
                 FROM cdp.DMN_PAH_SEGMENT 
                 WHERE actv_Flag = '1'
             ) S ON U.managing_hcp_jnj_id = S.jnj_id
-            WHERE date_format(pa_completed_date, 'yyyy-MM-dd HH:mm:ss') > '2018-12-31 00:00:00'
-            AND date_format(pa_completed_date, 'yyyy-MM-dd HH:mm:ss') <= date_format(current_date(), 'yyyy-MM-dd HH:mm:ss')
+            WHERE pa_completed_date > '2018-12-31'
+            AND pa_completed_date <= CURRENT_DATE
             """
             
             logger.info("🔍 Executing CDP extraction query")

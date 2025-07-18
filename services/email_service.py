@@ -85,7 +85,7 @@ This is an automated alert from the ETL monitoring system.
 Please acknowledge receipt and provide status updates.
 
 Best regards,
-DNA JanssenPH Support Team
+Madhunil Pachghare
             """.strip()
             
             return self.send_email(
@@ -121,7 +121,7 @@ Rows Processed: {rows_processed:,}
 The job executed without any issues.
 
 Best regards,
-DNA JanssenPH Support Team
+Madhunil Pachghare
                 """.strip()
             else:
                 body = f"""
@@ -136,7 +136,7 @@ Error: {error_message or 'Unknown error'}
 Please investigate the issue and take corrective action.
 
 Best regards,
-DNA JanssenPH Support Team
+Madhunil Pachghare
                 """.strip()
             
             return self.send_email(

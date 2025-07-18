@@ -24,20 +24,29 @@ RUN apt-get update && \
 RUN mkdir -p /app /app/logs && \
     chown -R spark:spark /app
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt /app/requirements.txt
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
-
 # Download Redshift JDBC driver
 RUN mkdir -p /opt/spark/jars && \
     wget -q https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/2.1.0.29/redshift-jdbc42-2.1.0.29.jar \
     -O /opt/spark/jars/redshift-jdbc42-2.1.0.29.jar
 
-# Copy application code
-COPY . /app
+RUN wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.517/aws-java-sdk-bundle-1.12.517.jar \
+    -O /opt/spark/jars/aws-java-sdk-bundle-1.12.517.jar
+
+RUN wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+    -O /opt/spark/jars/hadoop-aws-3.3.4.jar
 
 # Set working directory
 WORKDIR /app
+
+# Copy application code
+#COPY . /app
+COPY spark-etl-agent/ /app/
+
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt /app/
+#COPY requirements.txt /app/
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
 
 # Fix permissions
 RUN chown -R spark:spark /app
@@ -51,6 +60,9 @@ ENV LOAD_DATE=2025-05-19
 ENV LOG_LEVEL=INFO
 ENV LIMIT=10
 
+ENV AWS_SECRET_NAME=jph-eks-dev-secret
+ENV AWS_DEFAULT_REGION=us-east-1
+
 # Expose Spark UI port
 EXPOSE 4040
 
@@ -59,4 +71,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python3 -c "import pyspark; print('OK')" || exit 1
 
 # Default command - run the application in local mode
-CMD ["python3", "app.py", "--local", "--continuous", "--job-type", "control_m_poc_etl", "--job-id", "1", "--load-date", "2025-05-19"]
+CMD ["python3", "app.py", "--local", "--continuous","--job-type", "control_m_poc_etl", "--job-id", "3", "--load-date", "2025-05-19"]

@@ -41,7 +41,6 @@ class RedshiftConnector:
         
         logger.info(f"🔗 RedshiftConnector initialized")
         logger.info(f"📋 Type: {connection_type} ({self.CONNECTION_TYPES[connection_type]})")
-        logger.info(f"🌐 URL: {self.jdbc_url}")
     
     def _configure_connection(self) -> None:
         """Configure connection properties based on type."""
