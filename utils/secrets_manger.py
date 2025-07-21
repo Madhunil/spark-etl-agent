@@ -133,3 +133,4 @@ def get_secrets_manager() -> SecretsManager:
     if _secrets_manager is None:
         _secrets_manager = SecretsManager()
     return _secrets_manager
+    #return SecretsManager(secret_name=secret_name)

@@ -1,5 +1,5 @@
 # Dockerfile
-FROM apache/spark:3.5.0-python3
+FROM jeft-docker.artifactrepo.jnj.com/jph:dev.v1.2
 
 # Switch to root to install packages
 USER root
@@ -44,7 +44,7 @@ COPY spark-etl-agent/ /app/
 
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt /app/
+COPY _scm_config/sparkImageRequirements/requirements.txt /app/
 #COPY requirements.txt /app/
 RUN pip3 install --no-cache-dir -r /app/requirements.txt
 

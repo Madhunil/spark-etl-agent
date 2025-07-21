@@ -115,7 +115,7 @@ class SparkManager:
         conf.set("spark.kubernetes.namespace", self.settings.K8S_NAMESPACE)
         
         # Resource configuration
-        conf.set("spark.executor.instances", "1")
+        conf.set("spark.executor.instances", "2")
         conf.set("spark.driver.memory", self.settings.SPARK_DRIVER_MEMORY)
         conf.set("spark.executor.memory", self.settings.SPARK_EXECUTOR_MEMORY)
         conf.set("spark.kubernetes.executor.limit.cores", "1")

@@ -245,6 +245,10 @@ def main() -> int:
     parser = create_argument_parser()
     args = parser.parse_args()
     
+    # secrets_name = args.secrets_name
+
+    # print(f"🔐 Using secrets name: {secrets_name}")
+
     # Set up logging
     setup_logging(log_level=args.log_level)
     
@@ -258,6 +262,7 @@ def main() -> int:
     
     try:
         # Load settings
+        #settings = get_settings(secrets_name=secrets_name)
         settings = get_settings()
         logger.info("✅ Application settings loaded")
         

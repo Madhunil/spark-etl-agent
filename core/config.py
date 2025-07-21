@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     """
     
     # Non-sensitive configuration from environment variables
-    SPARK_DRIVER_MEMORY: str = Field(default="2g", description="Spark driver memory")
-    SPARK_EXECUTOR_MEMORY: str = Field(default="2g", description="Spark executor memory")
+    SPARK_DRIVER_MEMORY: str = Field(default="1g", description="Spark driver memory")
+    SPARK_EXECUTOR_MEMORY: str = Field(default="1g", description="Spark executor memory")
     SPARK_APP_NAME: str = Field(default="jph-etl-spark-agent", description="Spark application name")
     SPARK_DRIVER_HOST: str = Field(default="headless-spark-etl-jph", description="Spark driver host")
     SPARK_DRIVER_PORT: str = Field(default="2223", description="Spark driver port")
@@ -66,20 +66,20 @@ class Settings(BaseSettings):
     JCAP_REDSHIFT_PASSWORD: str = Field(default="", description="JCAP Redshift password")
     
     # S3 Configuration (from Secrets Manager)
-    S3_BUCKET: str = Field(default="data/test", description="S3 bucket for data staging")
+    S3_BUCKET: str = Field(default="itx-ahr-jcap-jph-data/test", description="S3 bucket for data staging")
     S3_REGION: str = Field(default="us-east-1", description="S3 region")
     S3_IAM_ROLE: str = Field(default="", description="IAM role for S3/Redshift operations")
     S3_ACCESS_KEY: Optional[str] = Field(default="", description="S3 access key (optional)")
     S3_SECRET_KEY: Optional[str] = Field(default="", description="S3 secret key (optional)")
     
     # Email Configuration (from Secrets Manager)
-    SMTP_SERVER: str = Field(default="", description="SMTP server")
+    SMTP_SERVER: str = Field(default="smtp.na.jnj.com", description="SMTP server")
     SMTP_PORT: int = Field(default=25, description="SMTP port")
     SMTP_USE_TLS: bool = Field(default=False, description="Use TLS for SMTP")
     SMTP_USERNAME: Optional[str] = Field(default="", description="SMTP username")
     SMTP_PASSWORD: Optional[str] = Field(default="", description="SMTP password")
-    EMAIL_FROM: str = Field(default="", description="From email address")
-    EMAIL_TO_DNA_TEAM: str = Field(default="" , description="DNA team email address")
+    EMAIL_FROM: str = Field(default="MPachgha@its.jnj.com", description="From email address")
+    EMAIL_TO_DNA_TEAM: str = Field(default="MPachgha@its.jnj.com" , description="DNA team email address")
     
     # AWS configs
     AWS_SECRET_NAME: str = Field(default="", description="AWS Secrets Manager secret name")
@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     
     def __init__(self, **data):
         """Initialize settings and load from Secrets Manager"""
+
         # First, initialize with defaults and env vars
         super().__init__(**data)
         
@@ -113,6 +114,8 @@ class Settings(BaseSettings):
             from utils.secrets_manager import get_secrets_manager
             
             logger.info(f"🔐 Loading configuration from AWS Secrets Manager")
+            #secrets_name = self._secrets_name
+            #secrets_manager = get_secrets_manager(secret_name=secrets_name)
             secrets_manager = get_secrets_manager()
             logger.info(f"📋 Using secret: {secrets_manager.secret_name}")
             
@@ -233,7 +236,6 @@ class Settings(BaseSettings):
                     f"Missing required configuration for {job_type}: {', '.join(missing_fields)}"
                 )
 
-@lru_cache()
 def get_settings() -> Settings:
     """Get cached application settings."""
     return Settings()

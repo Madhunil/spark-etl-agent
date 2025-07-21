@@ -13,7 +13,6 @@ from core.config import get_settings
 class JcapPaEtlService:
     """
     Production JCAP PA ETL service with comprehensive workflow management.
-    Implements backup/restore, validation, and alerting using pure Spark.
     """
     
     def __init__(self, spark):
@@ -28,8 +27,8 @@ class JcapPaEtlService:
         self.email_service = EmailService()
         
         # Configuration
-        self.main_table = "jcap_pa_dashboard"
-        self.backup_table = "jcap_pa_dashboard_bak"
+        self.main_table = "jcap_pa"
+        self.backup_table = "jcap_pa_bkp"
         self.schema = self.settings.JCAP_REDSHIFT_SCHEMA
         self.s3_path = f"s3://{self.settings.S3_BUCKET}/jcap_pa_dashboard/"
         
@@ -39,12 +38,7 @@ class JcapPaEtlService:
         logger.info(f"💾 S3 Staging: {self.s3_path}")
     
     def run_jcap_pa_etl(self, load_date: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Execute complete JCAP PA ETL workflow.
-        
-        Returns:
-            Comprehensive job execution results
-        """
+        """Execute complete JCAP PA ETL workflow."""
         try:
             logger.info("🚀 Starting JCAP PA ETL (Production Workflow)")
             start_time = datetime.now()
@@ -69,11 +63,10 @@ class JcapPaEtlService:
             # Step 4: Stage to S3
             logger.info("4️⃣ Staging data to S3")
             self._stage_to_s3(df_transformed)
-            #logger.info("4️⃣ Staging data to S3 skipped")
 
-            # Step 5: Load to destination
+            # Step 5: Load to destination (FIXED)
             logger.info("5️⃣ Loading to destination")
-            self._load_to_destination()
+            self._load_to_destination(df_transformed)
             
             # Step 6: Validate and alert
             logger.info("6️⃣ Validating results")
@@ -134,11 +127,12 @@ class JcapPaEtlService:
             }
     
     def _create_and_validate_backup(self) -> int:
-        """Create backup with comprehensive validation."""
+        """FIXED: Create backup with comprehensive validation using corrected methods."""
         try:
-            # Truncate backup table
+            # Truncate backup table using fixed method
             logger.info("🗑️ Truncating backup table")
             self.jcap_connector.truncate_table(self.backup_table, self.schema)
+            #logger.info("🗑️ Skip Truncating backup table")
             
             # Get original count
             original_count = self.jcap_connector.get_table_count(self.main_table, self.schema)
@@ -148,7 +142,7 @@ class JcapPaEtlService:
                 logger.warning("⚠️ Main table is empty - skipping backup")
                 return 0
             
-            # Copy data to backup
+            # Copy data to backup using fixed method
             logger.info("🔄 Copying data to backup")
             copied_rows = self.jcap_connector.copy_table_data(
                 source_table=self.main_table,
@@ -174,22 +168,17 @@ class JcapPaEtlService:
             raise RuntimeError(f"Backup creation failed: {str(e)}") from e
     
     def _extract_cdp_data(self):
-        """
-        Extract data from CDP with optimized query.
-        
-        Returns:
-            DataFrame: Query results
-        """
+        """Extract data from CDP with optimized query."""
         try:
             # Enhanced CDP query with PROPER Redshift syntax
             cdp_query = """
             SELECT DISTINCT
-                TO_CHAR(CURRENT_DATE, 'MM-DD-YYYY') AS JCAP_table_loaddate,
-                p.pmc_patid,
+                CURRENT_DATE::date AS JCAP_table_loaddate,
+                p.pmc_patid::varchar  as pmc_patid,
                 U.MANAGING_HCP_STATE AS REFERRING_HCP_PATH_STATE,
                 P.prod_nm AS DrugorTherapy,
-                TO_CHAR(pa_completed_date, 'MM-DD-YYYY') AS PA_CompletedDate,
-                TO_CHAR(pa_initiated_date, 'MM-DD-YYYY') AS PA_InitiatedDate,
+                pa_completed_date::Date AS PA_CompletedDate,
+                pa_initiated_date::Date AS PA_InitiatedDate,
                 p.pa_disposition AS PADisposition,
                 P.Appeal_Disposition AS AppealDisposition,
                 P.FE_REquired AS FEREquired,
@@ -197,7 +186,7 @@ class JcapPaEtlService:
                 P.rx_PayerName AS rx_PayerName,
                 P.rx_PayerType AS rx_PayerType,
                 p.sr_type AS srtype,
-                TO_CHAR(p.load_date, 'MM-DD-YYYY') AS load_date,
+                p.load_date::Date AS load_date,
                 p.ins_planname AS insurancebenefitplanname,
                 p.pbm_name AS pbmpayername,
                 C.LHM_Name,
@@ -223,7 +212,7 @@ class JcapPaEtlService:
                 FROM cdp.DMN_PAH_SEGMENT 
                 WHERE actv_Flag = '1'
             ) S ON U.managing_hcp_jnj_id = S.jnj_id
-            WHERE pa_completed_date > '2018-12-31'
+            WHERE pa_completed_date > '2024-12-31'
             AND pa_completed_date <= CURRENT_DATE
             """
             
@@ -249,12 +238,40 @@ class JcapPaEtlService:
             logger.info("🔄 Transforming data types and formats")
             
             # Transform date columns with proper error handling
-            df_transformed = (df
-                .withColumn("load_date", to_timestamp(col("load_date"), "MM-dd-yyyy"))
-                .withColumn("PA_CompletedDate", to_timestamp(col("PA_CompletedDate"), "MM-dd-yyyy"))
-                .withColumn("PA_InitiatedDate", to_timestamp(col("PA_InitiatedDate"), "MM-dd-yyyy"))
-                .withColumn("JCAP_table_loaddate", to_timestamp(col("JCAP_table_loaddate"), "MM-dd-yyyy"))
-            )
+            # df_transformed = (df
+            #     .withColumn("load_date", to_timestamp(col("load_date"), "MM-dd-yyyy"))
+            #     .withColumn("PA_CompletedDate", to_timestamp(col("PA_CompletedDate"), "MM-dd-yyyy"))
+            #     .withColumn("PA_InitiatedDate", to_timestamp(col("PA_InitiatedDate"), "MM-dd-yyyy"))
+            #     .withColumn("JCAP_table_loaddate", to_timestamp(col("JCAP_table_loaddate"), "MM-dd-yyyy"))
+            #     .drop("PA_CompletedDate", "PA_InitiatedDate", "JCAP_table_loaddate")  # Remove originals
+            # )
+            
+            df =df.withColumn("load_date", to_timestamp(col("load_date"), "MM-dd-yyyy"))
+            df =df.withColumn("PA_CompletedDate", to_timestamp(col("PA_CompletedDate"), "MM-dd-yyyy"))
+            df =df.withColumn("PA_InitiatedDate", to_timestamp(col("PA_InitiatedDate"), "MM-dd-yyyy"))
+            df =df.withColumn("JCAP_table_loaddate", to_timestamp(col("JCAP_table_loaddate"), "MM-dd-yyyy"))
+            df.dtypes
+
+            df_transformed = df
+
+
+            # Rename remaining columns to match target schema
+            column_mapping = {
+                "DrugorTherapy": "drugortherapy",
+                "PADisposition": "padisposition", 
+                "AppealDisposition": "appealdisposition",
+                "FEREquired": "ferequired",
+                "rx_PlanName": "rx_planname",
+                "rx_PayerName": "rx_payername", 
+                "rx_PayerType": "rx_payertype",
+                "LHM_Name": "lhm_name",
+                "REFERRING_HCP_PATH_STATE": "referring_hcp_path_state"
+            }
+            
+            # Apply column name transformations
+            for old_col, new_col in column_mapping.items():
+                if old_col in df_transformed.columns:
+                    df_transformed = df_transformed.withColumnRenamed(old_col, new_col)
             
             # Log schema information
             logger.info("📋 Transformed schema:")
@@ -290,30 +307,34 @@ class JcapPaEtlService:
             logger.exception(f"❌ S3 staging failed: {str(e)}")
             raise RuntimeError(f"S3 staging failed: {str(e)}") from e
     
-    def _load_to_destination(self):
-        """Load data from S3 to destination using COPY command."""
+    def _load_to_destination(self, df_transformed):
+        """FIXED: Load data using direct Spark JDBC write - exactly like notebook."""
         try:
-            # Truncate main table
+            # Truncate main table using fixed method
             logger.info("🗑️ Truncating destination table")
             self.jcap_connector.truncate_table(self.main_table, self.schema)
             
-            # Enhanced COPY command
-            copy_command = f"""
-            COPY {self.schema}.{self.main_table}(
-                jcap_table_loaddate, pmc_patid, referring_hcp_path_state, drugortherapy,
-                pa_completeddate, pa_initiateddate, padisposition, appealdisposition,
-                ferequired, rx_planname, rx_payername, rx_payertype, srtype, load_date,
-                insurancebenefitplanname, pbmpayername, lhm_name, region, segment
-            )
-            FROM '{self.s3_path}'
-            IAM_ROLE '{self.settings.S3_IAM_ROLE}'
-            FORMAT AS PARQUET
-            COMPUPDATE ON
-            STATUPDATE ON;
-            """
+            # Get row count before write
+            row_count = df_transformed.count()
+            logger.info(f"📥 Loading {row_count:,} rows using direct Spark JDBC")
             
-            logger.info("📥 Executing COPY command")
-            self.jcap_connector.execute_ddl(copy_command)
+            # FIXED: Direct write using Spark JDBC - exactly like notebook
+            self.jcap_connector.write_table(
+                df=df_transformed,
+                table_name=self.main_table,
+                schema=self.schema,
+                mode="append"  # Table is already truncated
+            )
+            
+            # Verify the load
+            final_count = self.jcap_connector.get_table_count(self.main_table, self.schema)
+            logger.info(f"📊 Final table count: {final_count:,}")
+            
+            if final_count == 0:
+                raise RuntimeError("No rows loaded despite successful write operation!")
+            
+            if final_count != row_count:
+                logger.warning(f"⚠️ Row count mismatch: Expected {row_count:,}, Got {final_count:,}")
             
             logger.info("✅ Data loaded to destination successfully")
             
