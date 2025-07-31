@@ -57,36 +57,36 @@ class EmailService:
             subject = f"🚨 Data Variance Alert - {job_name}"
             
             body = f"""
-🚨 DATA VARIANCE ALERT - IMMEDIATE ATTENTION REQUIRED
+                    🚨 DATA VARIANCE ALERT - IMMEDIATE ATTENTION REQUIRED
 
-Job: {job_name}
-Timestamp: {timestamp}
+                    Job: {job_name}
+                    Timestamp: {timestamp}
 
-📊 VARIANCE DETAILS:
-Previous Count: {previous_count:,} rows
-Current Count: {current_count:,} rows
-Variance: {variance_percentage:.2f}%
-Threshold: {self.settings.DATA_VARIANCE_THRESHOLD}%
+                    📊 VARIANCE DETAILS:
+                    Previous Count: {previous_count:,} rows
+                    Current Count: {current_count:,} rows
+                    Variance: {variance_percentage:.2f}%
+                    Threshold: {self.settings.DATA_VARIANCE_THRESHOLD}%
 
-⚠️ The data variance exceeds the configured threshold. Please investigate:
-• Data source changes
-• ETL logic modifications
-• Data quality issues
-• System performance problems
+                    ⚠️ The data variance exceeds the configured threshold. Please investigate:
+                    • Data source changes
+                    • ETL logic modifications
+                    • Data quality issues
+                    • System performance problems
 
-🔍 RECOMMENDED ACTIONS:
-1. Review source data for anomalies
-2. Check ETL logs for errors or warnings
-3. Validate data transformation logic
-4. Compare with historical patterns
-5. Contact data engineering team if needed
+                    🔍 RECOMMENDED ACTIONS:
+                    1. Review source data for anomalies
+                    2. Check ETL logs for errors or warnings
+                    3. Validate data transformation logic
+                    4. Compare with historical patterns
+                    5. Contact data engineering team if needed
 
-This is an automated alert from the ETL monitoring system.
-Please acknowledge receipt and provide status updates.
+                    This is an automated alert from the ETL monitoring system.
+                    Please acknowledge receipt and provide status updates.
 
-Best regards,
-Madhunil Pachghare
-            """.strip()
+                    Best regards,
+                    Madhunil Pachghare
+                    """.strip()
             
             return self.send_email(
                 to_email=self.settings.EMAIL_TO_DNA_TEAM,
@@ -99,7 +99,7 @@ Madhunil Pachghare
             return False
     
     def send_job_completion_notification(self, job_name: str, status: str,
-                                       duration: float, rows_processed: int = 0,
+                                       duration: float, rows_processed: int = 0, variance_percentage: Optional[float] = None,
                                        error_message: Optional[str] = None) -> bool:
         """Send job completion notification."""
         try:
@@ -110,34 +110,35 @@ Madhunil Pachghare
             
             if status == "Success":
                 body = f"""
-✅ JOB COMPLETED SUCCESSFULLY
+                        ✅ JOB COMPLETED SUCCESSFULLY
 
-Job: {job_name}
-Status: {status}
-Completion Time: {timestamp}
-Duration: {duration:.2f} seconds
-Rows Processed: {rows_processed:,}
+                        Job: {job_name}
+                        Status: {status}
+                        Completion Time: {timestamp}
+                        Duration: {duration:.2f} seconds
+                        Rows Processed: {rows_processed}
+                        Variance: {variance_percentage:.2f}%
 
-The job executed without any issues.
+                        The job was executed without any issues by the JPH-spark-etl-agent. The variance and time taken is displayed above.
 
-Best regards,
-Madhunil Pachghare
-                """.strip()
+                        Best regards,
+                        Madhunil Pachghare
+                        """.strip()
             else:
                 body = f"""
-❌ JOB EXECUTION FAILED
+                        ❌ JOB EXECUTION FAILED
 
-Job: {job_name}
-Status: {status}
-Failure Time: {timestamp}
-Duration: {duration:.2f} seconds
-Error: {error_message or 'Unknown error'}
+                        Job: {job_name}
+                        Status: {status}
+                        Failure Time: {timestamp}
+                        Duration: {duration:.2f} seconds
+                        Error: {error_message or 'Unknown error'}
 
-Please investigate the issue and take corrective action.
+                        Please investigate the issue and take corrective action.
 
-Best regards,
-Madhunil Pachghare
-                """.strip()
+                        Best regards,
+                        Madhunil Pachghare
+                        """.strip()
             
             return self.send_email(
                 to_email=self.settings.EMAIL_TO_DNA_TEAM,

@@ -253,7 +253,7 @@ def main() -> int:
     setup_logging(log_level=args.log_level)
     
     from loguru import logger
-    logger.info("Starting JPH Spark ETL agent v1.2")
+    logger.info("Starting JPH Spark ETL agent v1.3")
     
     if args.continuous:
         logger.info(f"🔄 Continuous mode enabled (interval: {args.interval}s)")

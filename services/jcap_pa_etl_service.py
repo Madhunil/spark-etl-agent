@@ -27,8 +27,8 @@ class JcapPaEtlService:
         self.email_service = EmailService()
         
         # Configuration
-        self.main_table = "jcap_pa"
-        self.backup_table = "jcap_pa_bkp"
+        self.main_table = "pah_jcap_pa"
+        self.backup_table = "pah_jcap_pa_bkp"
         self.schema = self.settings.JCAP_REDSHIFT_SCHEMA
         self.s3_path = f"s3://{self.settings.S3_BUCKET}/jcap_pa_dashboard/"
         
@@ -84,7 +84,9 @@ class JcapPaEtlService:
             # Send success notification
             self.email_service.send_job_completion_notification(
                 job_name="JCAP PA ETL",
+                variance_percentage=variance_result['variance_percentage'],
                 status="Success",
+                rows_processed=current_count,
                 duration=duration
             )
 
@@ -172,48 +174,56 @@ class JcapPaEtlService:
         try:
             # Enhanced CDP query with PROPER Redshift syntax
             cdp_query = """
-            SELECT DISTINCT
-                CURRENT_DATE::date AS JCAP_table_loaddate,
-                p.pmc_patid::varchar  as pmc_patid,
-                U.MANAGING_HCP_STATE AS REFERRING_HCP_PATH_STATE,
-                P.prod_nm AS DrugorTherapy,
-                pa_completed_date::Date AS PA_CompletedDate,
-                pa_initiated_date::Date AS PA_InitiatedDate,
-                p.pa_disposition AS PADisposition,
-                P.Appeal_Disposition AS AppealDisposition,
-                P.FE_REquired AS FEREquired,
-                P.rx_PlanName AS rx_PlanName,
-                P.rx_PayerName AS rx_PayerName,
-                P.rx_PayerType AS rx_PayerType,
-                p.sr_type AS srtype,
-                p.load_date::Date AS load_date,
-                p.ins_planname AS insurancebenefitplanname,
-                p.pbm_name AS pbmpayername,
-                C.LHM_Name,
-                c.bd_terrname AS region,
-                S.dynamic_segment AS segment
-            FROM (
-                SELECT * FROM cdp.fct_pah_pa_payer_details
-                WHERE UPPER(prod_nm) IN ('OPSUMIT', 'UPTRAVI', 'OPSYNVI')
-                AND pa_disposition IN ('Approved', 'Denied')
-            ) P
-            LEFT JOIN (
-                SELECT DISTINCT 
-                    pmc_patid, prod_nm, MANAGING_HCP_STATE,
-                    managing_hcp_zip, managing_hcp_jnj_id 
-                FROM cdp.fct_pah_ref_cap_dly
-            ) U ON P.pmc_patid = U.pmc_PATID 
-                AND UPPER(P.prod_nm) = UPPER(U.prod_nm)
-            LEFT JOIN (
-                SELECT * FROM cdp.dmn_pah_curr_alignment_all
-            ) C ON U.managing_hcp_zip = C.zip
-            LEFT JOIN (
-                SELECT JNJ_ID, Dynamic_Segment 
-                FROM cdp.DMN_PAH_SEGMENT 
-                WHERE actv_Flag = '1'
-            ) S ON U.managing_hcp_jnj_id = S.jnj_id
-            WHERE pa_completed_date > '2024-12-31'
-            AND pa_completed_date <= CURRENT_DATE
+            SELECT  CURRENT_DATE::date AS JCAP_table_loaddate,
+                    p.pmc_patid::varchar  as pmc_patid,
+                    U.managing_hcp_state AS VREFERRING_HCP_PATH_STATE,
+                    P.prod_nm AS DrugorTherapy,
+                    pa_completed_date::date AS PA_CompletedDate,
+                    p.pa_disposition AS PADisposition,
+                    appeal_complete_date::date AS appeal_completedate,
+                    P.appeal_disposition AS AppealDisposition,
+                    case when appeal_complete_date > pa_completed_date then appeal_complete_date else pa_completed_date end as Overall_date,
+                    case 
+                    when pa_disposition='Approved' then 'Approved'
+                    when pa_disposition='Denied' and appeal_disposition = 'Approved' then 'Approved'
+                    when pa_disposition='Denied' then 'Denied' END as Final_PA_Disposition,
+                    P.fe_required AS FEREquired,
+                    P.rx_planname AS rx_PlanName,
+                    P.rx_payername AS rx_PayerName,
+                    P.rx_payertype AS rx_PayerType,
+                    p.sr_type AS srtype,
+                    p.load_date,
+                    p.ins_planname AS insurancebenefitplanname,
+                    p.pbm_name AS pbmpayername,
+                    C.lhm_name,
+                    c.bd_terrname AS region,
+                    S.dynamic_segment AS segment
+                FROM   (SELECT *          
+                        FROM   cdp.fct_pah_pa_payer_details
+                        WHERE  Upper(prod_nm) IN ( 'OPSUMIT', 'UPTRAVI', 'OPSYNVI' )
+                            AND Upper(pa_disposition) IN ( 'APPROVED', 'DENIED' )
+                            AND pa_completed_date >= '01/01/2020'
+                            AND pa_completed_date <= CURRENT_DATE ) P
+                    LEFT JOIN 
+                    (SELECT DISTINCT pmc_patid,
+                                        prod_nm,
+                                        managing_hcp_state,
+                                        managing_hcp_zip,
+                                        managing_hcp_jnj_id
+                                FROM   cdp.fct_pah_ref_cap_dly) AS U
+                            ON P.pmc_patid = U.pmc_patid
+                                AND Upper(P.prod_nm) = Upper(U.prod_nm)
+                    LEFT JOIN 
+                    (SELECT * FROM   cdp.dmn_pah_curr_alignment_all) AS C
+                            ON U.managing_hcp_zip = C.zip
+                    LEFT JOIN 
+                    (SELECT jnj_id,
+                            dynamic_segment
+                                FROM   cdp.dmn_pah_segment
+                                WHERE  actv_flag = '1') S
+                            ON U.managing_hcp_jnj_id = S.jnj_id
+                            
+                order by drugortherapy,pmc_patid
             """
             
             logger.info("🔍 Executing CDP extraction query")
@@ -248,7 +258,9 @@ class JcapPaEtlService:
             
             df =df.withColumn("load_date", to_timestamp(col("load_date"), "MM-dd-yyyy"))
             df =df.withColumn("PA_CompletedDate", to_timestamp(col("PA_CompletedDate"), "MM-dd-yyyy"))
-            df =df.withColumn("PA_InitiatedDate", to_timestamp(col("PA_InitiatedDate"), "MM-dd-yyyy"))
+            #df =df.withColumn("PA_InitiatedDate", to_timestamp(col("PA_InitiatedDate"), "MM-dd-yyyy"))
+            df =df.withColumn("Overall_date", to_timestamp(col("Overall_date"), "MM-dd-yyyy"))
+            df =df.withColumn("appeal_completedate", to_timestamp(col("appeal_completedate"), "MM-dd-yyyy"))
             df =df.withColumn("JCAP_table_loaddate", to_timestamp(col("JCAP_table_loaddate"), "MM-dd-yyyy"))
             df.dtypes
 

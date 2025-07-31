@@ -10,7 +10,7 @@ Environment Setup:
 - Both secrets contain same JSON structure with environment-specific values
 """
 import os
-from typing import Optional
+from typing import Optional, List
 from pydantic import Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
@@ -79,8 +79,8 @@ class Settings(BaseSettings):
     SMTP_USERNAME: Optional[str] = Field(default="", description="SMTP username")
     SMTP_PASSWORD: Optional[str] = Field(default="", description="SMTP password")
     EMAIL_FROM: str = Field(default="MPachgha@its.jnj.com", description="From email address")
-    EMAIL_TO_DNA_TEAM: str = Field(default="MPachgha@its.jnj.com" , description="DNA team email address")
-    
+    EMAIL_TO_DNA_TEAM: List[str] = Field(default=["MPachgha@its.jnj.com", "TWankhad@its.jnj.com"] , description="DNA team email address")
+
     # AWS configs
     AWS_SECRET_NAME: str = Field(default="", description="AWS Secrets Manager secret name")
 

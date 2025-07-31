@@ -117,7 +117,7 @@ class SparkManager:
         # Resource configuration
         conf.set("spark.executor.instances", "2")
         conf.set("spark.driver.memory", self.settings.SPARK_DRIVER_MEMORY)
-        conf.set("spark.executor.memory", self.settings.SPARK_EXECUTOR_MEMORY)
+        conf.set("spark.executor.memory", "2g")
         conf.set("spark.kubernetes.executor.limit.cores", "1")
         conf.set("spark.kubernetes.driver.limit.cores", "1")
         conf.set("spark.kubernetes.driver.request.cores", "0.2")
